@@ -1,0 +1,29 @@
+{
+  "name": "AI English Library Dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bullseye",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "AI English Library Server",
+      "onAutoForward": "openBrowser"
+    }
+  },
+
+  "postCreateCommand": "npm install",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.vscode-typescript-next",
+        "github.copilot"
+      ]
+    }
+  }
+}
