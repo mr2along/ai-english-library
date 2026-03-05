@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Learning Library — English B1–B2 (On-device AI)</title>
+
+  <!-- Tailwind CDN (dev) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <style type="text/tailwindcss">
+    @theme {
+      --color-brand: #2563eb; /* indigo-600 */
+    }
+    .btn { @apply inline-flex items-center gap-2 rounded-lg px-4 py-2 font-medium bg-[--color-brand] text-white hover:opacity-90 disabled:opacity-50; }
+    .btn-ghost { @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 font-medium border border-zinc-300 dark:border-zinc-700; }
+    .card { @apply bg-white dark:bg-zinc-900 rounded-xl shadow border border-zinc-200/60 dark:border-zinc-800/60 p-4; }
+    .label { @apply text-sm text-zinc-500 dark:text-zinc-400; }
+    .pill { @apply inline-block rounded-full bg-zinc-100 dark:bg-zinc-800 px-3 py-1 text-sm; }
+    .input { @apply w-full rounded-lg border px-3 py-2 dark:bg-zinc-950; }
+    .select { @apply w-full rounded-lg border px-3 py-2 dark:bg-zinc-950; }
+    .thumb { @apply w-full rounded-lg border; }
+  </style>
+</head>
+
+<body class="h-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+  <div class="mx-auto max-w-7xl p-4 md:p-6">
+    <!-- Header -->
+    <header class="mb-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl md:text-3xl font-bold">Learning Library</h1>
+        <span class="pill">Free • On-device AI</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="modelSelect" class="select w-64">
+          <option value="Phi-3.1-mini-4k-instruct-q4f32_1-MLC">WebLLM: Phi‑3.1 mini (faster)</option>
+          <option value="Qwen2.5-3B-Instruct-q4f32_1-MLC">WebLLM: Qwen‑2.5 3B (fast)</option>
+          <option value="Llama-3.1-8B-Instruct-q4f32_1-MLC">WebLLM: Llama‑3.1 8B (high quality)</option>
+        </select>
+        <button id="toggleDark" class="btn-ghost">Dark</button>
+      </div>
+    </header>
+
+    <!-- Toolbar -->
+    <div class="grid grid-cols-1 md:grid-cols-[2fr,1fr,1fr,1fr,auto] gap-3 items-end mb-4">
+      <label class="block">
+        <span class="label">Search title/desc</span>
+        <input id="searchBox" class="input" placeholder="Search…" />
+      </label>
+      <label class="block">
+        <span class="label">Level</span>
+        <select id="filterLevel" class="select"><option value="">All</option></select>
+      </label>
+      <label class="block">
+        <span class="label">Unit</span>
+        <select id="filterUnit" class="select"><option value="">All</option></select>
+      </label>
+      <label class="block">
+        <span class="label">Type</span>
+        <select id="filterType" class="select">
+          <option value="">All</option>
+          <option>Quiz</option><option>Article</option><option>Vocabulary</option><option>Grammar</option>
+        </select>
+      </label>
+      <div class="flex gap-2">
+        <button id="btnResetFilters" class="btn-ghost">Reset</button>
+        <button id="btnImport" class="btn">Import list</button>
+      </div>
+    </div>
+
+    <!-- List -->
+    <div id="list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+
+    <footer class="mt-6 text-xs text-zinc-500">
+      Model status: <span id="modelStatus" class="font-medium">idle</span>
+    </footer>
+  </div>
+
+  <!-- MODAL: Import -->
+  <dialog id="dlgImport" class="rounded-xl w-full max-w-3xl">
+    <form method="dialog" class="p-4 space-y-3">
+      <h3 class="text-lg font-semibold">Import từ danh sách thô</h3>
+      <p class="text-sm text-zinc-500">Dán danh sách (như bạn gửi). Parser tự nhận Type, Title, Description, Level, Unit, Duration.</p>
+      <textarea id="rawInput" rows="12" class="input h-72"></textarea>
+      <div class="flex justify-end gap-2">
+        <button class="btn-ghost">Cancel</button>
+        <button id="btnDoImport" class="btn">Parse & Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- MODAL: AI Quiz -->
+  <dialog id="dlgQuiz" class="rounded-xl w-full max-w-3xl">
+    <form method="dialog" class="p-4 space-y-3">
+      <h3 class="text-lg font-semibold">Generate AI Quiz (WebLLM)</h3>
+      <label class="block">
+        <span class="label">Source</span>
+        <textarea id="quizSource" rows="6" class="input" placeholder="Paste lesson text, transcript, or key points…"></textarea>
+      </label>
+      <label class="block">
+        <span class="label">YouTube URL (optional)</span>
+        <input id="quizVideo" class="input" placeholder="https://www.youtube.com/watch?v=..." />
+      </label>
+      <div class="flex items-center gap-2">
+        <label class="label">Questions:</label>
+        <input id="quizCount" type="number" min="5" max="20" value="10" class="input w-24" />
+        <button id="btnGenQuiz" class="btn">Generate</button>
+        <span id="quizStatus" class="text-sm"></span>
+      </div>
+      <div id="quizRender" class="space-y-3"></div>
+      <div class="flex justify-between">
+        <small class="text-zinc-500">Quiz JSON lưu tạm trong LocalStorage.</small>
+        <button class="btn-ghost">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- MODAL: Recommend videos -->
+  <dialog id="dlgRecommend" class="rounded-xl w-full max-w-5xl">
+    <form method="dialog" class="p-4 space-y-3">
+      <h3 class="text-lg font-semibold">Suggested videos</h3>
+      <p class="text-sm text-zinc-500">AI gợi ý câu truy vấn (WebLLM), sau đó tìm video qua backend YouTube Search.</p>
+      <div class="grid md:grid-cols-[1fr_auto_auto] gap-2 items-end">
+        <label class="block">
+          <span class="label">Search query</span>
+          <input id="svQuery" class="input" placeholder="e.g., Passive voice in English for business" />
+        </label>
+        <button id="btnAIQuery" class="btn-ghost">AI: suggest</button>
+        <button id="btnSearchYT" class="btn">Search</button>
+      </div>
+      <div id="svStatus" class="text-sm"></div>
+      <div id="svResults" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+      <div class="flex justify-end"><button class="btn-ghost">Close</button></div>
+    </form>
+  </dialog>
+
+  <!-- ========== Scripts (ESM) ========== -->
+  <script type="module">
+    // Dark mode toggle
+    document.getElementById('toggleDark').onclick = () => {
+      document.documentElement.classList.toggle('dark');
+    };
+
+    // State
+    const LS_KEY = 'learning_library_items_v1';
+    let ITEMS = loadItems();
+
+    if (ITEMS.length === 0) {
+      ITEMS = [
+        {type:'Quiz', title:'Dentistry vocabulary (2)', desc:'Learn some dentistry vocabulary!', level:8, unit:32, duration:10},
+        {type:'Quiz', title:'Career Success: By + ing', desc:"Practice using 'by + ing' in relation to careers.", level:11, unit:44, duration:10},
+        {type:'Quiz', title:'Infinitive vs. Gerund (1)', desc:'When to use infinitive vs. gerund.', level:11, unit:43, duration:10},
+        {type:'Quiz', title:'Passive (2)', desc:'Different ways/voices in English.', level:11, unit:43, duration:10},
+        {type:'Article', title:'Idiom: A Piece of Cake', desc:'Meaning & use of the idiom.', level:10, unit:40, duration:5},
+        {type:'Vocabulary', title:'Cooking Vocabulary (2)', desc:'Useful words about cooking.', level:11, unit:42, duration:20},
+        {type:'Grammar', title:'Conditional Review', desc:'Conditionals & potential outcomes.', level:11, unit:43, duration:10}
+      ];
+      saveItems();
+    }
+
+    const $list = document.getElementById('list');
+    const $level = document.getElementById('filterLevel');
+    const $unit = document.getElementById('filterUnit');
+    const $type = document.getElementById('filterType');
+    const $search = document.getElementById('searchBox');
+
+    function populateOptions() {
+      const levels = [...new Set(ITEMS.map(x=>x.level))].sort((a,b)=>a-b);
+      const units = [...new Set(ITEMS.map(x=>x.unit))].sort((a,b)=>a-b);
+      $level.innerHTML = `<option value="">All</option>`;
+      $unit.innerHTML = `<option value="">All</option>`;
+      levels.forEach(v=>{ const opt=document.createElement('option'); opt.value=v; opt.textContent=v; $level.appendChild(opt); });
+      units.forEach(v=>{ const opt=document.createElement('option'); opt.value=v; opt.textContent=v; $unit.appendChild(opt); });
+    }
+
+    function renderList() {
+      const q = ($search.value||'').toLowerCase();
+      const fl = $level.value, fu = $unit.value, ft = $type.value;
+      const rows = ITEMS.filter(x =>
+        (!fl || String(x.level)===fl) &&
+        (!fu || String(x.unit)===fu) &&
+        (!ft || x.type===ft) &&
+        (!q || (x.title+' '+(x.desc||'')).toLowerCase().includes(q))
+      );
+      if (rows.length===0) $list.innerHTML = `<div class="card"><p>No items. Try clearing filters.</p></div>`;
+      else {
+        $list.innerHTML = rows.map((x,i)=>cardHTML(x,i)).join('');
+        rows.forEach((x,i)=>bindCardEvents(x,i));
+      }
+    }
+
+    function cardHTML(x,i) {
+      const maybeVideo = x.video ? `
+        <div class="mt-2" id="vid_${i}">
+          <div class="aspect-video">
+            <iframe class="w-full h-full rounded-lg border"
+              src="https://www.youtube-nocookie.com/embed/${x.video}?rel=0&modestbranding=1"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen></iframe>
+          </div>
+        </div>` : `<div class="mt-2 hidden" id="vid_${i}"></div>`;
+
+      return `<div class="card space-y-2">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-xs text-zinc-500">${x.type}</div>
+            <h3 class="text-lg font-semibold">${escapeHTML(x.title)}</h3>
+          </div>
+          <div class="text-right text-sm">
+            <div class="pill">Level ${x.level}</div>
+            <div class="pill">Unit ${x.unit}</div>
+            <div class="pill">${x.duration||10} mins</div>
+          </div>
+        </div>
+        <p class="text-sm">${escapeHTML(x.desc||'')}</p>
+        <div class="flex gap-2">
+          <button class="btn" data-quiz="${i}">AI Quiz</button>
+          <button class="btn-ghost" data-video="${i}">Embed video</button>
+          <button class="btn-ghost" data-suggest="${i}">Suggest videos</button>
+        </div>
+        ${maybeVideo}
+      </div>`;
+    }
+
+    function bindCardEvents(x,i){
+      const bq = document.querySelector(`button[data-quiz="${i}"]`);
+      const bv = document.querySelector(`button[data-video="${i}"]`);
+      const bs = document.querySelector(`button[data-suggest="${i}"]`);
+      bq.onclick = ()=>openQuizDialog(x);
+      bv.onclick = ()=>{
+        const div = document.getElementById(`vid_${i}`);
+        const url = prompt('Paste YouTube URL to embed:');
+        if (!url) return;
+        const id = extractYouTubeId(url);
+        div.innerHTML = `<div class="aspect-video">
+          <iframe class="w-full h-full rounded-lg border"
+            src="https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen></iframe>
+        </div>`;
+        div.classList.remove('hidden');
+        ITEMS[i].video = id; saveItems();
+      };
+      bs.onclick = ()=>openRecommendDialog(x, i);
+    }
+
+    function escapeHTML(s){ return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+    // Import dialog
+    const $dlgImport = document.getElementById('dlgImport');
+    document.getElementById('btnImport').onclick = ()=> $dlgImport.showModal();
+    document.getElementById('btnDoImport').onclick = (e)=>{
+      e.preventDefault();
+      const raw = document.getElementById('rawInput').value;
+      const parsed = parseRawList(raw);
+      if (parsed.length===0) return alert('Không parse được. Kiểm tra format.');
+      ITEMS = parsed; saveItems(); populateOptions(); renderList(); $dlgImport.close();
+    };
+
+    function parseRawList(text){
+      const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
+      const out=[]; let i=0;
+      const TYPES = new Set(['Quiz','Article','Vocabulary','Grammar']);
+      const isLevelLine = s => /^Level\s+\d+,\s*Unit\s+\d+/i.test(s);
+      function readLevel(s){ const m=s.match(/Level\s+(\d+)\s*,\s*Unit\s+(\d+)/i); return m?{level:+m[1], unit:+m[2]}:null; }
+      function readMins(s){ const m=s.match(/(\d+)\s*Min/i); return m?+m[1]:null; }
+      while (i<lines.length){
+        if (!TYPES.has(lines[i])) { i++; continue; }
+        const type = lines[i]; i++;
+        const title = (lines[i]||''); i++;
+        let desc = '';
+        while (i<lines.length && !isLevelLine(lines[i]) && !TYPES.has(lines[i])) {
+          desc += (desc?' ':'') + lines[i]; i++;
+        }
+        let level=0, unit=0, duration=10;
+        if (i<lines.length && isLevelLine(lines[i])) {
+          const lu = readLevel(lines[i]); if (lu){ level=lu.level; unit=lu.unit; } i++;
+        }
+        if (i<lines.length && /Min/i.test(lines[i])) {
+          const d = readMins(lines[i]); if (d) duration=d; i++;
+        }
+        out.push({type, title, desc, level, unit, duration});
+      }
+      return out;
+    }
+
+    function loadItems(){ try { return JSON.parse(localStorage.getItem(LS_KEY)||'[]'); } catch { return []; } }
+    function saveItems(){ localStorage.setItem(LS_KEY, JSON.stringify(ITEMS)); }
+
+    document.getElementById('btnResetFilters').onclick = ()=>{
+      [$level,$unit,$type,$search].forEach(x=>x.value=''); renderList();
+    };
+    [$level,$unit,$type,$search].forEach(el=>el.addEventListener('input', renderList));
+
+    populateOptions(); renderList();
+
+    function extractYouTubeId(url){
+      try{
+        const u=new URL(url);
+        if (u.hostname.includes('youtu.be')) return u.pathname.slice(1);
+        const v=u.searchParams.get('v'); if (v) return v;
+      }catch{}
+      return url;
+    }
+
+    // ===================== WebLLM =====================
+    import * as webllm from 'https://esm.run/@mlc-ai/web-llm';
+    let engine=null;
+    const $modelStatus = document.getElementById('modelStatus');
+    const $modelSelect = document.getElementById('modelSelect');
+    let currentModel = localStorage.getItem('webllm_model') || $modelSelect.value;
+
+    async function ensureEngine() {
+      if (engine) return engine;
+      $modelStatus.textContent = 'Loading model… (first time may take a while; cached afterwards)';
+      engine = await webllm.CreateMLCEngine(currentModel, {
+        initProgressCallback: (p)=>{ $modelStatus.textContent = p.text; }
+      });
+      $modelStatus.textContent = 'Model ready.';
+      return engine;
+    }
+    $modelSelect.onchange = async (e)=>{
+      currentModel = e.target.value; localStorage.setItem('webllm_model', currentModel);
+      engine = null; await ensureEngine();
+    };
+    window.addEventListener('click', ()=>ensureEngine(), {once:true});
+
+    // ===================== AI Quiz =====================
+    const $dlgQuiz = document.getElementById('dlgQuiz');
+    const $quizSource = document.getElementById('quizSource');
+    const $quizVideo = document.getElementById('quizVideo');
+    const $quizCount = document.getElementById('quizCount');
+    const $quizStatus = document.getElementById('quizStatus');
+    const $quizRender = document.getElementById('quizRender');
+
+    function openQuizDialog(item){
+      $quizSource.value = `${item.title}\n\n${item.desc||''}\n(Level ${item.level}, Unit ${item.unit})`;
+      $quizVideo.value = '';
+      $quizCount.value = 10;
+      $quizRender.innerHTML = '';
+      $quizStatus.textContent = '';
+      $dlgQuiz.showModal();
+    }
+
+    document.getElementById('btnGenQuiz').onclick = async (e)=>{
+      e.preventDefault();
+      const src = $quizSource.value.trim();
+      if (!src) return alert('Paste nội dung nguồn để sinh quiz.');
+      const n = Math.max(5, Math.min(20, +$quizCount.value||10));
+      await ensureEngine();
+
+      const schema = `{
+        "quiz_title": "",
+        "mcq": [{"question":"","options":[""],"answer":"","explain_vi":""}],
+        "short": [{"question":"","answer":""}],
+        "cloze": [{"text":"","blanks":[0],"answers":[""]}]
+      }`;
+
+      const sys = { role:'system', content:
+        `You are an ESL test constructor for adult learners (B1–B2).
+Return STRICT JSON only (no markdown) with schema: ${schema}.
+Rules:
+- Create ${Math.ceil(n*0.6)} MCQ (4 options each), ${Math.floor(n*0.4)} short-answer.
+- 1–2 cloze (short sentences) with word indexes + answers.
+- Focus grammar/vocab from the source. MCQ explanations in Vietnamese.` };
+
+      const user = { role:'user', content:
+        `Source content:\n${src}\nVideo (optional): ${$quizVideo.value||'N/A'}`};
+
+      $quizStatus.textContent = 'Generating…';
+      const resp = await engine.chat.completions.create({
+        messages: [sys, user],
+        temperature: 0.3,
+        response_format: { type: "json_object" }
+      });
+      const text = resp.choices?.[0]?.message?.content || '{}';
+      const data = safeJSON(text);
+      localStorage.setItem('last_quiz', JSON.stringify(data));
+      renderQuiz(data);
+      $quizStatus.textContent = 'Done.';
+    };
+
+    function renderQuiz(Q){
+      $quizRender.innerHTML = '';
+      const title = Q.quiz_title || 'Practice Quiz';
+      $quizRender.innerHTML += `<h4 class="text-lg font-semibold">${escapeHTML(title)}</h4>`;
+
+      if (Array.isArray(Q.mcq)) {
+        $quizRender.innerHTML += `<h5 class="font-semibold mt-2">Multiple Choice</h5>`;
+        Q.mcq.forEach((q, idx)=>{
+          const name = `mcq_${idx}`;
+          const opts = (q.options||[]).map(o=>`
+            <label class="block"><input type="radio" name="${name}" value="${escapeHTML(o)}"> ${escapeHTML(o)}</label>`
+          ).join('');
+          $quizRender.innerHTML += `<div class="card space-y-2">
+            <div class="font-medium">${idx+1}. ${escapeHTML(q.question||'')}</div>
+            ${opts}
+            <details class="text-sm"><summary>Show answer</summary><div class="mt-1">Ans: <b>${escapeHTML(q.answer||'')}</b><br>${escapeHTML(q.explain_vi||'')}</div></details>
+          </div>`;
+        });
+      }
+      if (Array.isArray(Q.short)) {
+        $quizRender.innerHTML += `<h5 class="font-semibold mt-2">Short Answer</h5>`;
+        Q.short.forEach((q, idx)=>{
+          $quizRender.innerHTML += `<div class="card space-y-2">
+            <div class="font-medium">${idx+1}. ${escapeHTML(q.question||'')}</div>
+            <input class="input" placeholder="Your answer…">
+            <details class="text-sm"><summary>Show sample answer</summary><div class="mt-1">${escapeHTML(q.answer||'')}</div></details>
+          </div>`;
+        });
+      }
+      if (Array.isArray(Q.cloze) && Q.cloze.length>0) {
+        $quizRender.innerHTML += `<h5 class="font-semibold mt-2">Cloze</h5>`;
+        Q.cloze.forEach((c, idx)=>{
+          const words = (c.text||'').split(' ');
+          const blanks = new Set(c.blanks||[]);
+          const line = words.map((w,i)=> blanks.has(i) ? `<input data-ans="${w}" class="border rounded px-2 py-1 w-28">` : w).join(' ');
+          $quizRender.innerHTML += `<div class="card"><div><b>${idx+1}.</b> ${line}</div></div>`;
+        });
+        const btn = document.createElement('button');
+        btn.className='btn mt-2'; btn.textContent='Check Cloze';
+        btn.onclick = ()=>{
+          const inputs = $quizRender.querySelectorAll('input[data-ans]');
+          let correct=0; inputs.forEach(i=>{
+            const ans=(i.dataset.ans||'').replace(/[^\w'-]/g,'').toLowerCase();
+            const val=(i.value||'').replace(/[^\w'-]/g,'').toLowerCase();
+            i.style.borderColor = (ans===val)?'#22c55e':'#ef4444';
+            if (ans===val) correct++;
+          });
+          alert(`Correct: ${correct}/${inputs.length}`);
+        };
+        $quizRender.appendChild(btn);
+      }
+    }
+
+    function safeJSON(s){ try { return JSON.parse(s); } catch { return {}; } }
+
+    // ===================== Recommend videos (server) =====================
+    const $dlgRecommend = document.getElementById('dlgRecommend');
+    const $svQuery = document.getElementById('svQuery');
+    const $svStatus = document.getElementById('svStatus');
+    const $svResults = document.getElementById('svResults');
+    const $btnAIQuery = document.getElementById('btnAIQuery');
+    const $btnSearchYT = document.getElementById('btnSearchYT');
+
+    let CURRENT_ITEM = null;
+    let CURRENT_CARD_INDEX = null;
+
+    function openRecommendDialog(item, index){
+      CURRENT_ITEM = item; CURRENT_CARD_INDEX = index;
+      const base = [item.title, item.type, item.desc||'', `level ${item.level} unit ${item.unit}`].join(' ').trim();
+      $svQuery.value = base; $svResults.innerHTML = ''; $svStatus.textContent = '';
+      $dlgRecommend.showModal();
+    }
+
+    $btnAIQuery.onclick = async (e)=>{
+      e.preventDefault();
+      await ensureEngine();
+      $svStatus.textContent = 'AI is thinking…';
+      const messages = [
+        { role:'system', content:
+          `You help generate effective YouTube search queries for English learning videos.
+Return JSON: {"queries":["..."]} with 3-5 short queries, focused on grammar/vocabulary point and workplace context when applicable.`},
+        { role:'user', content: `Title: ${CURRENT_ITEM?.title}\nType: ${CURRENT_ITEM?.type}\nDesc: ${CURRENT_ITEM?.desc}\nLevel: ${CURRENT_ITEM?.level}, Unit: ${CURRENT_ITEM?.unit}\nBase query: ${$svQuery.value}` }
+      ];
+      const resp = await engine.chat.completions.create({
+        messages, temperature: 0.2, response_format: { type: "json_object" }
+      });
+      const text = resp.choices?.[0]?.message?.content || '{"queries":[]}';
+      let arr = [];
+      try { const obj = JSON.parse(text); arr = Array.isArray(obj)?obj:(obj.queries||[]); } catch {}
+      if (!arr || arr.length===0) { $svStatus.textContent='AI could not suggest. Edit query manually.'; return; }
+      $svStatus.innerHTML = 'Click a suggestion to search: ' + arr.map(q=>`<button class="pill" data-q="${q}">${q}</button>`).join(' ');
+      $svStatus.querySelectorAll('button[data-q]').forEach(b=>{
+        b.onclick = ()=>{ $svQuery.value = b.dataset.q; $btnSearchYT.click(); };
+      });
+    };
+
+    $btnSearchYT.onclick = async (e)=>{
+      e.preventDefault();
+      const q = $svQuery.value.trim();
+      if (!q) return alert('Enter a query.');
+      $svStatus.textContent = 'Searching…';
+      $svResults.innerHTML = '';
+      try {
+        const r = await fetch('/api/youtube/search', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ q, max: 9 })
+        });
+        const data = await r.json();
+        if (!Array.isArray(data.items) || data.items.length===0){
+          $svStatus.textContent = 'No results.'; return;
+        }
+        $svStatus.textContent = `Found ${data.items.length} videos.`;
+        renderSearchResults(data.items);
+      } catch (err){
+        console.error(err);
+        $svStatus.textContent = 'Search failed (is backend running, API key set?).';
+      }
+    };
+
+    function renderSearchResults(items){
+      $svResults.innerHTML = items.map(v=>{
+        const id = v.id;
+        const title = v.title || '';
+        const ch = v.channelTitle || '';
+        const thumb = v.thumbnail ? `<img src="${v.thumbnail}" alt="" class="thumb">` : '';
+        return `<div class="card space-y-2">
+          ${thumb}
+          <div class="font-medium">${escapeHTML(title)}</div>
+          <div class="text-sm text-zinc-500">${escapeHTML(ch)}</div>
+          <div class="flex gap-2">
+            <button class="btn" data-embed="${id}">Embed</button>
+            <a class="btn-ghost" href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noreferrer">Open</a>
+          </div>
+        </div>`;
+      }).join('');
+
+      $svResults.querySelectorAll('button[data-embed]').forEach(btn=>{
+        btn.onclick = ()=>{
+          const id = btn.dataset.embed;
+          const div = document.getElementById(`vid_${CURRENT_CARD_INDEX}`);
+          if (div){
+            div.innerHTML = `<div class="aspect-video">
+              <iframe class="w-full h-full rounded-lg border"
+                src="https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen></iframe>
+            </div>`;
+            div.classList.remove('hidden');
+          }
+          ITEMS[CURRENT_CARD_INDEX].video = id; saveItems();
+          alert('Embedded into the lesson card.');
+        };
+      });
+    }
+  </script>
+</body>
+</html>
