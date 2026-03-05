@@ -1,0 +1,14 @@
+{
+  "name": "ai-english-library",
+  "version": "1.0.0",
+  "description": "Learning Library with WebLLM (on-device) + Node backend for YouTube Search",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
